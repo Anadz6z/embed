@@ -1,0 +1,19 @@
+{
+  "bot": {
+    "name": "Discord Menu Bot",
+    "version": "1.0.0",
+    "description": "Advanced Discord bot with interactive menu system"
+  },
+  "features": {
+    "menus": true,
+    "commands": true,
+    "responders": true,
+    "analytics": true,
+    "logging": true
+  },
+  "limits": {
+    "maxMenuDepth": 5,
+    "maxHistorySize": 10,
+    "maxCacheSize": 1000
+  }
+}

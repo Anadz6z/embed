@@ -1,0 +1,62 @@
+[
+  {
+    "name": "grinning",
+    "unicode": "😀",
+    "category": "Smileys & Emotion",
+    "keywords": ["face", "smile", "happy", "joy", "grin"]
+  },
+  {
+    "name": "smiley",
+    "unicode": "😃",
+    "category": "Smileys & Emotion", 
+    "keywords": ["face", "smile", "happy", "joy", "haha"]
+  },
+  {
+    "name": "smile",
+    "unicode": "😄",
+    "category": "Smileys & Emotion",
+    "keywords": ["face", "smile", "happy", "joy", "laugh", "pleased"]
+  },
+  {
+    "name": "grin",
+    "unicode": "😁",
+    "category": "Smileys & Emotion",
+    "keywords": ["face", "smile", "happy", "joy", "kawaii"]
+  },
+  {
+    "name": "laughing",
+    "unicode": "😆",
+    "category": "Smileys & Emotion",
+    "keywords": ["face", "happy", "joy", "lol", "satisfied", "haha", "laugh", "funny"]
+  },
+  {
+    "name": "heart",
+    "unicode": "❤️",
+    "category": "Smileys & Emotion",
+    "keywords": ["love", "like", "affection", "valentines", "red"]
+  },
+  {
+    "name": "thumbsup",
+    "unicode": "👍",
+    "category": "People & Body",
+    "keywords": ["thumbsup", "yes", "awesome", "good", "agree", "accept", "cool", "hand", "like"]
+  },
+  {
+    "name": "thumbsdown", 
+    "unicode": "👎",
+    "category": "People & Body",
+    "keywords": ["thumbsdown", "no", "dislike", "hand"]
+  },
+  {
+    "name": "clap",
+    "unicode": "👏",
+    "category": "People & Body",
+    "keywords": ["hands", "praise", "applause", "congrats", "yay"]
+  },
+  {
+    "name": "wave",
+    "unicode": "👋",
+    "category": "People & Body", 
+    "keywords": ["hands", "gesture", "goodbye", "solong", "farewell", "hello", "hi", "palm"]
+  }
+]
