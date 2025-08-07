@@ -1,34 +1,30 @@
-export interface ErrorOptions {
-  code?: string;
-  cause?: unknown;
+export interface ErrorDetails {
+  code: string;
+  message: string;
   details?: any;
-  statusCode?: number;
-  isOperational?: boolean;
+  cause?: Error;
+  timestamp: Date;
+  context?: string;
 }
 
 export class AppError extends Error {
   public readonly code: string;
-  public readonly cause?: unknown;
   public readonly details?: any;
-  public readonly statusCode: number;
-  public readonly isOperational: boolean;
   public readonly timestamp: Date;
+  public readonly context?: string;
 
-  constructor(message: string, options: ErrorOptions = {}) {
+  constructor(message: string, options: Omit<ErrorDetails, 'message' | 'timestamp'>) {
     super(message);
-    
-    this.name = this.constructor.name;
-    this.code = options.code || "UNKNOWN_ERROR";
-    this.cause = options.cause;
+    this.name = 'AppError';
+    this.code = options.code;
     this.details = options.details;
-    this.statusCode = options.statusCode || 500;
-    this.isOperational = options.isOperational ?? true;
+    this.cause = options.cause;
     this.timestamp = new Date();
+    this.context = options.context;
+  }
 
-    // Maintains proper stack trace for where our error was thrown (only available on V8)
-    if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
-    }
+  static isAppError(error: any): error is AppError {
+    return error instanceof AppError;
   }
 
   toJSON() {
@@ -37,93 +33,73 @@ export class AppError extends Error {
       message: this.message,
       code: this.code,
       details: this.details,
-      statusCode: this.statusCode,
-      isOperational: this.isOperational,
       timestamp: this.timestamp.toISOString(),
+      context: this.context,
       stack: this.stack
     };
-  }
-
-  toString() {
-    return `${this.name}: ${this.message} (${this.code})`;
-  }
-}
-
-export function createError(message: string, options?: ErrorOptions): AppError {
-  return new AppError(message, options);
-}
-
-export function isAppError(error: unknown): error is AppError {
-  return error instanceof AppError;
-}
-
-export function handleError(error: unknown): AppError {
-  if (isAppError(error)) {
-    return error;
-  }
-
-  if (error instanceof Error) {
-    return new AppError(error.message, {
-      code: "WRAPPED_ERROR",
-      cause: error
-    });
-  }
-
-  return new AppError("An unknown error occurred", {
-    code: "UNKNOWN_ERROR",
-    cause: error
-  });
-}
-
-export function logError(error: unknown, context?: string): void {
-  const appError = handleError(error);
-  
-  const logData = {
-    context: context || "Unknown",
-    error: appError.toJSON()
-  };
-
-  if (appError.isOperational) {
-    console.warn("Operational error:", logData);
-  } else {
-    console.error("System error:", logData);
   }
 }
 
 export class ValidationError extends AppError {
   constructor(message: string, details?: any) {
     super(message, {
-      code: "VALIDATION_ERROR",
-      statusCode: 400,
+      code: 'VALIDATION_ERROR',
       details
     });
-  }
-}
-
-export class NotFoundError extends AppError {
-  constructor(resource: string, identifier?: string) {
-    const message = identifier 
-      ? `${resource} with identifier '${identifier}' not found`
-      : `${resource} not found`;
-      
-    super(message, {
-      code: "NOT_FOUND",
-      statusCode: 404,
-      details: { resource, identifier }
-    });
+    this.name = 'ValidationError';
   }
 }
 
 export class PermissionError extends AppError {
-  constructor(action: string, resource?: string) {
-    const message = resource
-      ? `Permission denied for action '${action}' on resource '${resource}'`
-      : `Permission denied for action '${action}'`;
-      
+  constructor(message: string, details?: any) {
     super(message, {
-      code: "PERMISSION_DENIED",
-      statusCode: 403,
-      details: { action, resource }
+      code: 'PERMISSION_ERROR',
+      details
+    });
+    this.name = 'PermissionError';
+  }
+}
+
+export class DiscordAPIError extends AppError {
+  constructor(message: string, details?: any) {
+    super(message, {
+      code: 'DISCORD_API_ERROR',
+      details
+    });
+    this.name = 'DiscordAPIError';
+  }
+}
+
+export class ConfigurationError extends AppError {
+  constructor(message: string, details?: any) {
+    super(message, {
+      code: 'CONFIGURATION_ERROR',
+      details
+    });
+    this.name = 'ConfigurationError';
+  }
+}
+
+export function createError(message: string, options: Omit<ErrorDetails, 'message' | 'timestamp'>): AppError {
+  return new AppError(message, options);
+}
+
+export function handleError(error: unknown, context?: string): AppError {
+  if (AppError.isAppError(error)) {
+    return error;
+  }
+
+  if (error instanceof Error) {
+    return new AppError(error.message, {
+      code: 'UNKNOWN_ERROR',
+      cause: error,
+      context
     });
   }
+
+  return new AppError('An unknown error occurred', {
+    code: 'UNKNOWN_ERROR',
+    details: error,
+    context
+  });
 }

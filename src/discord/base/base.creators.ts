@@ -8,17 +8,16 @@ import {
   ButtonStyle,
   TextInputStyle
 } from "discord.js";
-import type { BaseCreators } from "./base.types.js";
+import type { 
+  BaseCreators, 
+  ButtonOptions, 
+  SelectMenuOptions, 
+  ModalOptions, 
+  EmbedOptions 
+} from "./base.types.js";
 
 export class BaseCreatorsImpl implements BaseCreators {
-  createButton(options: {
-    customId?: string;
-    label?: string;
-    style?: ButtonStyle;
-    emoji?: string;
-    url?: string;
-    disabled?: boolean;
-  }) {
+  createButton(options: ButtonOptions): ButtonBuilder {
     const button = new ButtonBuilder();
     
     if (options.customId) button.setCustomId(options.customId);
@@ -31,20 +30,7 @@ export class BaseCreatorsImpl implements BaseCreators {
     return button;
   }
 
-  createSelectMenu(options: {
-    customId: string;
-    placeholder?: string;
-    minValues?: number;
-    maxValues?: number;
-    disabled?: boolean;
-    options: Array<{
-      label: string;
-      value: string;
-      description?: string;
-      emoji?: string;
-      default?: boolean;
-    }>;
-  }) {
+  createSelectMenu(options: SelectMenuOptions): StringSelectMenuBuilder {
     const selectMenu = new StringSelectMenuBuilder()
       .setCustomId(options.customId)
       .addOptions(options.options);
@@ -57,20 +43,7 @@ export class BaseCreatorsImpl implements BaseCreators {
     return selectMenu;
   }
 
-  createModal(options: {
-    customId: string;
-    title: string;
-    components: Array<{
-      customId: string;
-      label: string;
-      style?: TextInputStyle;
-      placeholder?: string;
-      required?: boolean;
-      minLength?: number;
-      maxLength?: number;
-      value?: string;
-    }>;
-  }) {
+  createModal(options: ModalOptions): ModalBuilder {
     const modal = new ModalBuilder()
       .setCustomId(options.customId)
       .setTitle(options.title);
@@ -94,17 +67,7 @@ export class BaseCreatorsImpl implements BaseCreators {
     return modal;
   }
 
-  createEmbed(options: {
-    title?: string;
-    description?: string;
-    color?: number;
-    author?: { name: string; iconURL?: string; url?: string };
-    footer?: { text: string; iconURL?: string };
-    thumbnail?: string;
-    image?: string;
-    timestamp?: Date | number;
-    fields?: Array<{ name: string; value: string; inline?: boolean }>;
-  }) {
+  createEmbed(options: EmbedOptions): EmbedBuilder {
     const embed = new EmbedBuilder();
     
     if (options.title) embed.setTitle(options.title);
@@ -120,8 +83,90 @@ export class BaseCreatorsImpl implements BaseCreators {
     return embed;
   }
 
-  createActionRow(...components: any[]) {
-    return new ActionRowBuilder().addComponents(...components);
+  createActionRow(...components: (ButtonBuilder | StringSelectMenuBuilder)[]): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder> {
+    return new ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>().addComponents(...components);
+  }
+
+  // Utility methods for common patterns
+  createSuccessEmbed(title: string, description: string): EmbedBuilder {
+    return this.createEmbed({
+      title: `✅ ${title}`,
+      description,
+      color: 0x00ff00,
+      timestamp: new Date()
+    });
+  }
+
+  createErrorEmbed(title: string, description: string): EmbedBuilder {
+    return this.createEmbed({
+      title: `❌ ${title}`,
+      description,
+      color: 0xff0000,
+      timestamp: new Date()
+    });
+  }
+
+  createWarningEmbed(title: string, description: string): EmbedBuilder {
+    return this.createEmbed({
+      title: `⚠️ ${title}`,
+      description,
+      color: 0xffaa00,
+      timestamp: new Date()
+    });
+  }
+
+  createInfoEmbed(title: string, description: string): EmbedBuilder {
+    return this.createEmbed({
+      title: `ℹ️ ${title}`,
+      description,
+      color: 0x0099ff,
+      timestamp: new Date()
+    });
+  }
+
+  createPrimaryButton(customId: string, label: string, emoji?: string): ButtonBuilder {
+    return this.createButton({
+      customId,
+      label,
+      style: ButtonStyle.Primary,
+      emoji
+    });
+  }
+
+  createSecondaryButton(customId: string, label: string, emoji?: string): ButtonBuilder {
+    return this.createButton({
+      customId,
+      label,
+      style: ButtonStyle.Secondary,
+      emoji
+    });
+  }
+
+  createSuccessButton(customId: string, label: string, emoji?: string): ButtonBuilder {
+    return this.createButton({
+      customId,
+      label,
+      style: ButtonStyle.Success,
+      emoji
+    });
+  }
+
+  createDangerButton(customId: string, label: string, emoji?: string): ButtonBuilder {
+    return this.createButton({
+      customId,
+      label,
+      style: ButtonStyle.Danger,
+      emoji
+    });
+  }
+
+  createLinkButton(url: string, label: string, emoji?: string): ButtonBuilder {
+    return this.createButton({
+      url,
+      label,
+      style: ButtonStyle.Link,
+      emoji
+    });
   }
 }
 
