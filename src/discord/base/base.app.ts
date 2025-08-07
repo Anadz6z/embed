@@ -3,117 +3,238 @@ import { readdirSync } from "fs";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import type { BaseAppData, BaseCommand, BaseResponder, BaseEvent } from "./base.types.js";
-import { validateEnv } from "../../settings/env.validate.js";
+import { config } from "../../settings/config.js";
 import { logger } from "../../settings/logger.js";
+import { AppError, DiscordAPIError } from "../../settings/error.js";
+import { Cache } from "../../shared/cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export async function createApp(): Promise<BaseAppData> {
-  const env = validateEnv();
+  const startTime = performance.now();
   
-  const client = new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-      GatewayIntentBits.GuildMembers
-    ]
-  });
+  try {
+    // Load configuration
+    await config.load();
+    const discordConfig = config.getDiscord();
+    
+    logger.info("Starting Discord bot...", "App");
 
-  const commands = new Collection<string, BaseCommand>();
-  const responders = new Collection<string, BaseResponder>();
+    const client = new Client({
+      intents: discordConfig.intents.map(intent => GatewayIntentBits[intent as keyof typeof GatewayIntentBits])
+    });
 
-  // Load commands
-  await loadCommands(commands);
-  
-  // Load responders
-  await loadResponders(responders);
-  
-  // Load events
-  await loadEvents(client);
+    const commands = new Collection<string, BaseCommand>();
+    const responders = new Collection<string, BaseResponder>();
 
-  // Register slash commands
-  await registerCommands(commands, env.DISCORD_TOKEN, env.DISCORD_CLIENT_ID, env.DISCORD_GUILD_ID);
+    // Load components with performance monitoring
+    await logger.time("Loading commands", () => loadCommands(commands));
+    await logger.time("Loading responders", () => loadResponders(responders));
+    await logger.time("Loading events", () => loadEvents(client));
 
-  // Store collections in client for access in events
-  (client as any).commands = commands;
-  (client as any).responders = responders;
+    // Register slash commands
+    await logger.time("Registering commands", () => 
+      registerCommands(commands, discordConfig.token, discordConfig.clientId, discordConfig.guildId)
+    );
 
-  await client.login(env.DISCORD_TOKEN);
+    // Store collections in client for access in events
+    (client as any).commands = commands;
+    (client as any).responders = responders;
 
-  logger.info("Discord bot started successfully!");
+    // Login to Discord
+    await logger.time("Discord login", () => client.login(discordConfig.token));
 
-  return { client, commands, responders };
+    const duration = performance.now() - startTime;
+    logger.info(`Discord bot started successfully in ${duration.toFixed(2)}ms!`, "App");
+
+    return { client, commands, responders };
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    logger.error(`Failed to start Discord bot after ${duration.toFixed(2)}ms`, "App", error);
+    throw error;
+  }
 }
 
 async function loadCommands(commands: Collection<string, BaseCommand>) {
   const commandsPath = join(__dirname, "../commands");
-  const commandFolders = readdirSync(commandsPath, { withFileTypes: true });
+  
+  try {
+    const commandFolders = readdirSync(commandsPath, { withFileTypes: true });
 
-  for (const folder of commandFolders) {
-    if (folder.isDirectory()) {
-      const folderPath = join(commandsPath, folder.name);
-      const commandFiles = readdirSync(folderPath).filter(file => file.endsWith('.js') || file.endsWith('.ts'));
-      
-      for (const file of commandFiles) {
-        const filePath = join(folderPath, file);
-        const command = await import(filePath);
-        
-        if ('data' in command.default && 'execute' in command.default) {
-          commands.set(command.default.data.name, command.default);
-          logger.info(`Loaded command: ${command.default.data.name}`);
-        }
-      }
-    } else if (folder.name.endsWith('.js') || folder.name.endsWith('.ts')) {
-      const filePath = join(commandsPath, folder.name);
-      const command = await import(filePath);
-      
-      if ('data' in command.default && 'execute' in command.default) {
-        commands.set(command.default.data.name, command.default);
-        logger.info(`Loaded command: ${command.default.data.name}`);
+    for (const folder of commandFolders) {
+      if (folder.isDirectory()) {
+        await loadCommandsFromFolder(commands, join(commandsPath, folder.name), folder.name);
+      } else if (folder.name.endsWith('.js') || folder.name.endsWith('.ts')) {
+        await loadCommandFromFile(commands, join(commandsPath, folder.name));
       }
     }
+
+    logger.info(`Loaded ${commands.size} commands`, "Commands");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('ENOENT')) {
+      logger.warn("Commands directory not found, skipping command loading", "Commands");
+    } else {
+      throw new AppError("Failed to load commands", {
+        code: "COMMAND_LOAD_ERROR",
+        cause: error instanceof Error ? error : undefined
+      });
+    }
+  }
+}
+
+async function loadCommandsFromFolder(
+  commands: Collection<string, BaseCommand>, 
+  folderPath: string, 
+  folderName: string
+) {
+  try {
+    const commandFiles = readdirSync(folderPath).filter(file => 
+      file.endsWith('.js') || file.endsWith('.ts')
+    );
+    
+    for (const file of commandFiles) {
+      await loadCommandFromFile(commands, join(folderPath, file));
+    }
+  } catch (error) {
+    logger.error(`Failed to load commands from folder: ${folderName}`, "Commands", error);
+  }
+}
+
+async function loadCommandFromFile(commands: Collection<string, BaseCommand>, filePath: string) {
+  try {
+    const command = await import(filePath);
+    
+    if ('data' in command.default && 'execute' in command.default) {
+      const commandInstance = command.default;
+      
+      // Validate command structure
+      if (!commandInstance.data.name) {
+        logger.warn(`Command missing name: ${filePath}`, "Commands");
+        return;
+      }
+
+      commands.set(commandInstance.data.name, commandInstance);
+      logger.debug(`Loaded command: ${commandInstance.data.name}`, "Commands");
+    } else {
+      logger.warn(`Invalid command structure in: ${filePath}`, "Commands");
+    }
+  } catch (error) {
+    logger.error(`Failed to load command from: ${filePath}`, "Commands", error);
   }
 }
 
 async function loadResponders(responders: Collection<string, BaseResponder>) {
   const respondersPath = join(__dirname, "../responders");
-  const responderFiles = readdirSync(respondersPath).filter(file => file.endsWith('.js') || file.endsWith('.ts'));
+  
+  try {
+    const responderFiles = readdirSync(respondersPath).filter(file => 
+      file.endsWith('.js') || file.endsWith('.ts')
+    );
 
-  for (const file of responderFiles) {
-    const filePath = join(respondersPath, file);
+    for (const file of responderFiles) {
+      await loadResponderFromFile(responders, join(respondersPath, file));
+    }
+
+    logger.info(`Loaded ${responders.size} responders`, "Responders");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('ENOENT')) {
+      logger.warn("Responders directory not found, skipping responder loading", "Responders");
+    } else {
+      throw new AppError("Failed to load responders", {
+        code: "RESPONDER_LOAD_ERROR",
+        cause: error instanceof Error ? error : undefined
+      });
+    }
+  }
+}
+
+async function loadResponderFromFile(responders: Collection<string, BaseResponder>, filePath: string) {
+  try {
     const responder = await import(filePath);
     
     if ('customId' in responder.default && 'execute' in responder.default) {
-      responders.set(responder.default.customId, responder.default);
-      logger.info(`Loaded responder: ${responder.default.customId}`);
+      const responderInstance = responder.default;
+      
+      // Validate responder structure
+      if (!responderInstance.customId) {
+        logger.warn(`Responder missing customId: ${filePath}`, "Responders");
+        return;
+      }
+
+      responders.set(responderInstance.customId, responderInstance);
+      logger.debug(`Loaded responder: ${responderInstance.customId}`, "Responders");
+    } else {
+      logger.warn(`Invalid responder structure in: ${filePath}`, "Responders");
     }
+  } catch (error) {
+    logger.error(`Failed to load responder from: ${filePath}`, "Responders", error);
   }
 }
 
 async function loadEvents(client: Client) {
   const eventsPath = join(__dirname, "../events");
-  const eventFolders = readdirSync(eventsPath, { withFileTypes: true });
+  
+  try {
+    const eventFolders = readdirSync(eventsPath, { withFileTypes: true });
 
-  for (const folder of eventFolders) {
-    if (folder.isDirectory()) {
-      const folderPath = join(eventsPath, folder.name);
-      const eventFiles = readdirSync(folderPath).filter(file => file.endsWith('.js') || file.endsWith('.ts'));
-      
-      for (const file of eventFiles) {
-        const filePath = join(folderPath, file);
-        const event = await import(filePath);
-        
-        if ('name' in event.default && 'execute' in event.default) {
-          if (event.default.once) {
-            client.once(event.default.name, (...args) => event.default.execute(...args));
-          } else {
-            client.on(event.default.name, (...args) => event.default.execute(...args));
-          }
-          logger.info(`Loaded event: ${event.default.name}`);
-        }
+    for (const folder of eventFolders) {
+      if (folder.isDirectory()) {
+        await loadEventsFromFolder(client, join(eventsPath, folder.name), folder.name);
       }
     }
+
+    logger.info("Events loaded successfully", "Events");
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('ENOENT')) {
+      logger.warn("Events directory not found, skipping event loading", "Events");
+    } else {
+      throw new AppError("Failed to load events", {
+        code: "EVENT_LOAD_ERROR",
+        cause: error instanceof Error ? error : undefined
+      });
+    }
+  }
+}
+
+async function loadEventsFromFolder(client: Client, folderPath: string, folderName: string) {
+  try {
+    const eventFiles = readdirSync(folderPath).filter(file => 
+      file.endsWith('.js') || file.endsWith('.ts')
+    );
+    
+    for (const file of eventFiles) {
+      await loadEventFromFile(client, join(folderPath, file));
+    }
+  } catch (error) {
+    logger.error(`Failed to load events from folder: ${folderName}`, "Events", error);
+  }
+}
+
+async function loadEventFromFile(client: Client, filePath: string) {
+  try {
+    const event = await import(filePath);
+    
+    if ('name' in event.default && 'execute' in event.default) {
+      const eventInstance = event.default;
+      
+      // Validate event structure
+      if (!eventInstance.name) {
+        logger.warn(`Event missing name: ${filePath}`, "Events");
+        return;
+      }
+
+      if (eventInstance.once) {
+        client.once(eventInstance.name, (...args) => eventInstance.execute(...args));
+      } else {
+        client.on(eventInstance.name, (...args) => eventInstance.execute(...args));
+      }
+      
+      logger.debug(`Loaded event: ${eventInstance.name}`, "Events");
+    } else {
+      logger.warn(`Invalid event structure in: ${filePath}`, "Events");
+    }
+  } catch (error) {
+    logger.error(`Failed to load event from: ${filePath}`, "Events", error);
   }
 }
 
@@ -127,7 +248,7 @@ async function registerCommands(
   const commandData = commands.map(command => command.data.toJSON());
 
   try {
-    logger.info(`Started refreshing ${commandData.length} application (/) commands.`);
+    logger.info(`Started refreshing ${commandData.length} application (/) commands.`, "Commands");
 
     if (guildId) {
       // Guild-specific commands for development
@@ -135,16 +256,18 @@ async function registerCommands(
         Routes.applicationGuildCommands(clientId, guildId),
         { body: commandData }
       );
-      logger.info(`Successfully reloaded ${commandData.length} guild application (/) commands.`);
+      logger.info(`Successfully reloaded ${commandData.length} guild application (/) commands.`, "Commands");
     } else {
       // Global commands for production
       await rest.put(
         Routes.applicationCommands(clientId),
         { body: commandData }
       );
-      logger.info(`Successfully reloaded ${commandData.length} global application (/) commands.`);
+      logger.info(`Successfully reloaded ${commandData.length} global application (/) commands.`, "Commands");
     }
   } catch (error) {
-    logger.error('Error registering commands:', error);
+    throw new DiscordAPIError("Error registering commands", {
+      details: { commandCount: commandData.length, guildId }
+    });
   }
 }

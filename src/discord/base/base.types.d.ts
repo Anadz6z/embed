@@ -5,7 +5,22 @@ import {
   Client, 
   Collection, 
   ModalSubmitInteraction, 
-  StringSelectMenuInteraction 
+  StringSelectMenuInteraction,
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  ButtonStyle,
+  TextInputStyle,
+  PermissionResolvable,
+  GuildMember,
+  User,
+  Guild,
+  Channel,
+  GuildBasedChannel
 } from "discord.js";
 
 export interface BaseAppData {
@@ -15,7 +30,7 @@ export interface BaseAppData {
 }
 
 export interface BaseCommand {
-  data: any;
+  data: SlashCommandBuilder;
   execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
   autocomplete?: (interaction: AutocompleteInteraction) => Promise<void>;
 }
@@ -34,17 +49,113 @@ export interface BaseEvent {
 }
 
 export interface BaseStorage {
-  get: (key: string) => any;
-  set: (key: string, value: any) => void;
-  delete: (key: string) => void;
+  get: <T = any>(key: string) => T | undefined;
+  set: <T = any>(key: string, value: T) => void;
+  delete: (key: string) => boolean;
   has: (key: string) => boolean;
   clear: () => void;
 }
 
+export interface ButtonOptions {
+  customId?: string;
+  label?: string;
+  style?: ButtonStyle;
+  emoji?: string;
+  url?: string;
+  disabled?: boolean;
+}
+
+export interface SelectMenuOptions {
+  customId: string;
+  placeholder?: string;
+  minValues?: number;
+  maxValues?: number;
+  disabled?: boolean;
+  options: Array<{
+    label: string;
+    value: string;
+    description?: string;
+    emoji?: string;
+    default?: boolean;
+  }>;
+}
+
+export interface ModalOptions {
+  customId: string;
+  title: string;
+  components: Array<{
+    customId: string;
+    label: string;
+    style?: TextInputStyle;
+    placeholder?: string;
+    required?: boolean;
+    minLength?: number;
+    maxLength?: number;
+    value?: string;
+  }>;
+}
+
+export interface EmbedOptions {
+  title?: string;
+  description?: string;
+  color?: number;
+  author?: { name: string; iconURL?: string; url?: string };
+  footer?: { text: string; iconURL?: string };
+  thumbnail?: string;
+  image?: string;
+  timestamp?: Date | number;
+  fields?: Array<{ name: string; value: string; inline?: boolean }>;
+}
+
 export interface BaseCreators {
-  createButton: (options: any) => any;
-  createSelectMenu: (options: any) => any;
-  createModal: (options: any) => any;
-  createEmbed: (options: any) => any;
-  createActionRow: (...components: any[]) => any;
+  createButton: (options: ButtonOptions) => ButtonBuilder;
+  createSelectMenu: (options: SelectMenuOptions) => StringSelectMenuBuilder;
+  createModal: (options: ModalOptions) => ModalBuilder;
+  createEmbed: (options: EmbedOptions) => EmbedBuilder;
+  createActionRow: (...components: (ButtonBuilder | StringSelectMenuBuilder)[]) => ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>;
+}
+
+export interface InteractionContext {
+  user: User;
+  member?: GuildMember;
+  guild?: Guild;
+  channel?: GuildBasedChannel;
+  permissions?: PermissionResolvable[];
+}
+
+export interface CommandContext extends InteractionContext {
+  options: ChatInputCommandInteraction['options'];
+}
+
+export interface ResponderContext extends InteractionContext {
+  customId: string;
+  componentType: 'button' | 'select' | 'modal';
+}
+
+export interface ValidationResult {
+  isValid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface CommandValidation {
+  permissions: ValidationResult;
+  cooldown: ValidationResult;
+  usage: ValidationResult;
+}
+
+export interface CooldownEntry {
+  userId: string;
+  commandName: string;
+  timestamp: number;
+  expiresAt: number;
+}
+
+export interface CommandStats {
+  name: string;
+  usageCount: number;
+  lastUsed: Date;
+  averageResponseTime: number;
+  errorCount: number;
+  successRate: number;
 }
